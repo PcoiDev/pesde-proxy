@@ -74,7 +74,7 @@ type WallySearchResponse = unknown;
 
 Downloads a Pesde archive for target `roblox`, extracts files, detects entrypoint, and also detects dependencies from `pesde.toml` with their versions when available.
 
-If `v` is omitted, the latest available version is used automatically. If `v=^x.y.z`, the latest stable version matching that range is used (for example `^0.3.0` resolves to `0.3.0` here). If `v=^^x.y.z`, the latest version is forced even when it is a prerelease.
+If `v` is omitted, the latest available version is used automatically (including prereleases when they are newer). If `v=^x.y.z`, the latest stable version matching that range is used (for example `^0.3.0` resolves to `0.3.0` here). If `v=^^x.y.z`, the latest stable version in the same major is forced. If `v=^^^x.y.z`, the latest stable global version is forced.
 
 ```ts
 type PesdePackageResponse = {
@@ -97,7 +97,7 @@ type PesdePackageResponse = {
 
 Downloads a Wally archive, extracts files, and returns:
 
-If `v` is omitted, the latest available version is used automatically. If `v=^x.y.z`, the latest stable version matching that range is used. If `v=^^x.y.z`, the latest version is forced even when it is a prerelease.
+If `v` is omitted, the latest available version is used automatically (including prereleases when they are newer). If `v=^x.y.z`, the latest stable version matching that range is used. If `v=^^x.y.z`, the latest stable version in the same major is forced. If `v=^^^x.y.z`, the latest stable global version is forced.
 
 ```ts
 type WallyPackageResponse = {
@@ -117,14 +117,20 @@ type WallyPackageResponse = {
 ## Quick examples
 
 ```bash
-curl "http://localhost:3000/health"
+curl "http://localhost:3000/health" # should return { "ok": true }
 curl "http://localhost:3000/search?q=promise"
-curl "http://localhost:3000/pesde/alicesaidhi/conch?v=0.3.0"
-curl "http://localhost:3000/pesde/alicesaidhi/conch"
-# ^x.y.z -> latest stable version matching range
-curl "http://localhost:3000/pesde/alicesaidhi/conch?v=^0.3.0"
-# ^^x.y.z -> force latest version, including prereleases
-curl "http://localhost:3000/pesde/alicesaidhi/conch?v=^^0.3.0"
+
+curl "http://localhost:3000/pesde/alicesaidhi/conch?v=0.3.0" # exact version only (must exist)
+curl "http://localhost:3000/pesde/alicesaidhi/conch" # no v: latest global (can be prerelease)
+curl "http://localhost:3000/pesde/alicesaidhi/conch?v=^0.3.0" # ^x.y.z: latest stable in range (x.y.?)
+curl "http://localhost:3000/pesde/alicesaidhi/conch?v=^^1.0.0" # ^^x.y.z: latest stable in same major (x.?.?)
+curl "http://localhost:3000/pesde/bloxlibs/betterscale?v=^^^1.0.0" # ^^^x.y.z: latest stable global (?.?.?)
+
+curl "http://localhost:3000/wally/sleitnick/trove?v=1.8.0" # exact version only (must exist)
+curl "http://localhost:3000/wally/sleitnick/trove" # no v: latest global (trove currently has no prereleases)
+curl "http://localhost:3000/wally/sleitnick/trove?v=^1.0.0" # latest stable in 1.0.?
+curl "http://localhost:3000/wally/sleitnick/trove?v=^^1.0.0" # latest stable in major (1.?.?)
+curl "http://localhost:3000/wally/sleitnick/trove?v=^^^1.0.0" # latest stable global (?.?.?)
 ```
 
 ---

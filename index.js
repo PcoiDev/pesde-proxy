@@ -13,6 +13,9 @@ const WALLY_REGISTRY = "https://api.wally.run";
 const WALLY_HEADERS = { "Wally-Version": "0.3.2" };
 const TARGET = "roblox";
 
+/** @typedef {{ path: string, content: string }} ExtractedFile */
+/** @typedef {{ name: string, version: string | null }} PackageDependency */
+
 function getPublicBaseUrl(port) {
 	const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
 	if (railwayDomain) return `https://${railwayDomain}`;
@@ -82,12 +85,14 @@ function parseTOMLValue(toml, key) {
 	return match ? match[1] : null;
 }
 
+// Reads the lib path from pesde.toml.
 function getPesdeEntrypoint(files) {
 	const manifest = files.find(f => f.path === "pesde.toml" || f.path.endsWith("/pesde.toml"));
 	if (!manifest) return null;
 	return parseTOMLValue(manifest.content, "lib");
 }
 
+// Parses dependencies from pesde.toml and returns name + version.
 function getPesdeDependencies(files) {
 	const manifest = files.find(f => f.path === "pesde.toml" || f.path.endsWith("/pesde.toml"));
 	if (!manifest) return [];
@@ -182,6 +187,11 @@ function getWallyEntrypoint(files) {
 	}
 }
 
+/**
+ * Returns the highest version, including prereleases.
+ * @param {string[]} versions
+ * @returns {string | null}
+ */
 function getLatestVersion(versions) {
 	if (!Array.isArray(versions) || versions.length === 0) return null;
 
@@ -191,13 +201,65 @@ function getLatestVersion(versions) {
 	return versions.slice().sort().reverse()[0] || null;
 }
 
+/**
+ * Returns the highest stable version (falls back to global latest if needed).
+ * @param {string[]} versions
+ * @returns {string | null}
+ */
+function getLatestStableVersion(versions) {
+	if (!Array.isArray(versions) || versions.length === 0) return null;
+
+	const stable = versions.filter(v => semver.valid(v) && semver.prerelease(v) === null);
+	if (stable.length > 0) return semver.rsort(stable)[0];
+
+	return getLatestVersion(versions);
+}
+
+/**
+ * Returns the highest stable version in a specific major line.
+ * @param {string[]} versions
+ * @param {number} major
+ * @returns {string | null}
+ */
+function getLatestStableVersionInMajor(versions, major) {
+	if (!Array.isArray(versions) || versions.length === 0) return null;
+
+	const stableInMajor = versions.filter(v => (
+		semver.valid(v)
+		&& semver.prerelease(v) === null
+		&& semver.major(v) === major
+	));
+
+	if (stableInMajor.length > 0) return semver.rsort(stableInMajor)[0];
+	return null;
+}
+
+/**
+ * Resolves API version rules (^, ^^, ^^^, exact, or empty).
+ * @param {string[]} versions
+ * @param {string | null} requestedVersion
+ * @returns {string | null}
+ */
 function resolveVersionFromList(versions, requestedVersion) {
 	if (!requestedVersion) return getLatestVersion(versions);
-	if (requestedVersion.startsWith("^^") || requestedVersion === "^0.0.0") {
-		const latest = getLatestVersion(versions);
+	if (requestedVersion.startsWith("^^^")) {
+		const latest = getLatestStableVersion(versions);
 		if (latest) return latest;
 
-		const exactFallback = requestedVersion.replace(/^\^\^/, "");
+		const exactFallback = requestedVersion.replace(/^\^\^\^/, "");
+		return versions.includes(exactFallback) ? exactFallback : null;
+	}
+
+	if (requestedVersion.startsWith("^^") || requestedVersion === "^0.0.0") {
+		const baseVersion = requestedVersion.replace(/^\^\^/, "");
+		const parsedBase = semver.parse(baseVersion, { loose: true });
+		const latest = parsedBase
+			? getLatestStableVersionInMajor(versions, parsedBase.major)
+			: getLatestStableVersion(versions);
+
+		if (latest) return latest;
+
+		const exactFallback = baseVersion;
 		return versions.includes(exactFallback) ? exactFallback : null;
 	}
 
@@ -364,7 +426,7 @@ app.get("/wally/search", async (req, res) => {
  *   name  (string) - Package name.
  *
  * Query Params:
- *   v (string, optional) - Exact package version, or ^0.0.0 to force latest.
+ *   v (string, optional) - Exact version, ^range, ^^major-stable, or ^^^latest-stable.
  *
  * Description:
  * Downloads the specified package archive from the Pesde registry for
@@ -439,7 +501,7 @@ app.get("/pesde/:scope/:name", async (req, res) => {
  *   name  (string) - Package name.
  *
  * Query Params:
- *   v (string, optional) - Exact package version, or ^0.0.0 to force latest.
+ *   v (string, optional) - Exact version, ^range, ^^major-stable, or ^^^latest-stable.
  *
  * Description:
  * Downloads the package archive from the Wally registry, extracts its
