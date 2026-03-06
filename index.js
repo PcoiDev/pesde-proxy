@@ -88,13 +88,24 @@ function getPesdeEntrypoint(files) {
 }
 
 function getWallyEntrypoint(files) {
+	const fallbackEntrypoint = (() => {
+		const initCandidates = ["init.luau", "init.lua"];
+
+		for (const candidate of initCandidates) {
+			const found = files.find(f => f.path === candidate || f.path.endsWith("/" + candidate));
+			if (found) return found.path;
+		}
+
+		return null;
+	})();
+
 	const projectFile = files.find(f => f.path === "default.project.json" || f.path.endsWith("/default.project.json"));
-	if (!projectFile) return null;
+	if (!projectFile) return fallbackEntrypoint;
 
 	try {
 		const project = JSON.parse(projectFile.content);
 		const srcPath = project?.tree?.["$path"];
-		if (!srcPath) return null;
+		if (!srcPath) return fallbackEntrypoint;
 
 		const normalized = srcPath.replace(/\\/g, "/").replace(/\/$/, "");
 		const candidates = [`${normalized}/init.luau`, `${normalized}/init.lua`];
@@ -105,9 +116,9 @@ function getWallyEntrypoint(files) {
 			}
 		}
 
-		return null;
+		return fallbackEntrypoint;
 	} catch {
-		return null;
+		return fallbackEntrypoint;
 	}
 }
 
