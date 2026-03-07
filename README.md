@@ -70,6 +70,34 @@ Pass-through to the Wally search endpoint (`Wally-Version: 0.3.2` header is appl
 type WallySearchResponse = unknown;
 ```
 
+### `GET /pesde/:scope/:name/versions`
+
+Returns all package versions for target `roblox`, ordered newest to oldest (latest first).
+
+```ts
+type PesdeVersionsResponse = {
+  package: string; // "scope/name"
+  target: "roblox";
+  latest: string;
+  oldest: string;
+  versions: string[];
+};
+```
+
+### `GET /wally/:scope/:name/versions`
+
+Returns all package versions ordered newest to oldest (latest first).
+
+```ts
+type WallyVersionsResponse = {
+  package: string; // "scope/name"
+  target: "roblox";
+  latest: string;
+  oldest: string;
+  versions: string[];
+};
+```
+
 ### `GET /pesde/:scope/:name?v=<version>`
 
 Downloads a Pesde archive for target `roblox`, extracts files, detects entrypoint, and also detects dependencies from `pesde.toml` with their versions when available.
@@ -121,12 +149,14 @@ curl "http://localhost:3000/health" # should return { "ok": true }
 curl "http://localhost:3000/search?q=promise"
 
 curl "http://localhost:3000/pesde/alicesaidhi/conch?v=0.3.0" # exact version only (must exist)
+curl "http://localhost:3000/pesde/alicesaidhi/conch/versions" # all versions, latest -> oldest
 curl "http://localhost:3000/pesde/alicesaidhi/conch" # no v: latest global (can be prerelease)
 curl "http://localhost:3000/pesde/alicesaidhi/conch?v=^0.3.0" # ^x.y.z: latest stable in range (x.y.?)
 curl "http://localhost:3000/pesde/alicesaidhi/conch?v=^^1.0.0" # ^^x.y.z: latest stable in same major (x.?.?)
 curl "http://localhost:3000/pesde/bloxlibs/betterscale?v=^^^1.0.0" # ^^^x.y.z: latest stable global (?.?.?)
 
 curl "http://localhost:3000/wally/sleitnick/trove?v=1.8.0" # exact version only (must exist)
+curl "http://localhost:3000/wally/sleitnick/trove/versions" # all versions, latest -> oldest
 curl "http://localhost:3000/wally/sleitnick/trove" # no v: latest global (trove currently has no prereleases)
 curl "http://localhost:3000/wally/sleitnick/trove?v=^1.0.0" # latest stable in 1.0.?
 curl "http://localhost:3000/wally/sleitnick/trove?v=^^1.0.0" # latest stable in major (1.?.?)

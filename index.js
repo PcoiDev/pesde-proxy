@@ -202,6 +202,21 @@ function getLatestVersion(versions) {
 }
 
 /**
+ * Returns all versions sorted from newest to oldest.
+ * @param {string[]} versions
+ * @returns {string[]}
+ */
+function sortVersionsNewestFirst(versions) {
+	if (!Array.isArray(versions) || versions.length === 0) return [];
+
+	const unique = [...new Set(versions.map(v => String(v || "").trim()).filter(Boolean))];
+	const semverVersions = unique.filter(v => semver.valid(v));
+	const nonSemverVersions = unique.filter(v => !semver.valid(v)).sort().reverse();
+
+	return [...semver.rsort(semverVersions), ...nonSemverVersions];
+}
+
+/**
  * Returns the highest stable version (falls back to global latest if needed).
  * @param {string[]} versions
  * @returns {string | null}
@@ -277,7 +292,7 @@ function resolveVersionFromList(versions, requestedVersion) {
 	return versions.includes(requestedVersion) ? requestedVersion : null;
 }
 
-async function resolvePesdeVersion(scope, name, requestedVersion) {
+async function getPesdePackageVersions(scope, name) {
 	const packageId = encodeURIComponent(`${scope}/${name}`);
 	const metadataUrl = `${PESDE_REGISTRY}/v1/packages/${packageId}`;
 
@@ -297,10 +312,10 @@ async function resolvePesdeVersion(scope, name, requestedVersion) {
 		.filter(([, value]) => Boolean(value?.targets?.[TARGET]))
 		.map(([version]) => version);
 
-	return resolveVersionFromList(versions, requestedVersion);
+	return sortVersionsNewestFirst(versions);
 }
 
-async function resolveWallyVersion(scope, name, requestedVersion) {
+async function getWallyPackageVersions(scope, name) {
 	const metadataUrl = `${WALLY_REGISTRY}/v1/package-metadata/${scope}/${name}`;
 
 	let response;
@@ -317,6 +332,16 @@ async function resolveWallyVersion(scope, name, requestedVersion) {
 	const metadata = await response.json();
 	const versions = [...new Set((metadata?.versions || []).map(v => v?.package?.version).filter(Boolean))];
 
+	return sortVersionsNewestFirst(versions);
+}
+
+async function resolvePesdeVersion(scope, name, requestedVersion) {
+	const versions = await getPesdePackageVersions(scope, name);
+	return resolveVersionFromList(versions, requestedVersion);
+}
+
+async function resolveWallyVersion(scope, name, requestedVersion) {
+	const versions = await getWallyPackageVersions(scope, name);
 	return resolveVersionFromList(versions, requestedVersion);
 }
 
@@ -414,6 +439,52 @@ app.get("/wally/search", async (req, res) => {
 	const response = await fetch(`${WALLY_REGISTRY}/v1/package-search?query=${encodeURIComponent(q)}`, { headers: WALLY_HEADERS });
 	const data = await response.json();
 	res.json(data);
+});
+
+app.get("/pesde/:scope/:name/versions", async (req, res) => {
+	const { scope, name } = req.params;
+
+	let versions;
+	try {
+		versions = await getPesdePackageVersions(scope, name);
+	} catch (err) {
+		return res.status(err.status || 500).json({ error: err.error || "Failed to get versions", details: err.details, url: err.url });
+	}
+
+	if (versions.length === 0) {
+		return res.status(404).json({ error: "No versions found for this package" });
+	}
+
+	res.json({
+		package: `${scope}/${name}`,
+		target: TARGET,
+		latest: versions[0],
+		oldest: versions[versions.length - 1],
+		versions,
+	});
+});
+
+app.get("/wally/:scope/:name/versions", async (req, res) => {
+	const { scope, name } = req.params;
+
+	let versions;
+	try {
+		versions = await getWallyPackageVersions(scope, name);
+	} catch (err) {
+		return res.status(err.status || 500).json({ error: err.error || "Failed to get versions", details: err.details, url: err.url });
+	}
+
+	if (versions.length === 0) {
+		return res.status(404).json({ error: "No versions found for this package" });
+	}
+
+	res.json({
+		package: `${scope}/${name}`,
+		target: TARGET,
+		latest: versions[0],
+		oldest: versions[versions.length - 1],
+		versions,
+	});
 });
 
 /**
